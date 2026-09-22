@@ -9,6 +9,7 @@ import {
   byFrequency,
   byMaterial,
   bySeason,
+  durabilityMatrix,
   garmentAnalytics,
   healthDistribution,
   stitchEffectiveness,
@@ -62,6 +63,13 @@ analyticsRouter.get(
   '/stitch-effectiveness',
   handler(async (req, res) => {
     ok(req, res, await stitchEffectiveness(req.ctx.wardrobeId));
+  }),
+);
+
+analyticsRouter.get(
+  '/durability-matrix',
+  handler(async (req, res) => {
+    ok(req, res, await durabilityMatrix(req.ctx.wardrobeId));
   }),
 );
 

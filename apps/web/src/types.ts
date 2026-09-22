@@ -513,6 +513,62 @@ export interface StitchEffectivenessResponse {
   insights: Insight[];
 }
 
+export interface DurabilityMatrixResponse {
+  cells: Array<{
+    materialPrimary: string;
+    season: Season;
+    band: WearFrequencyBand;
+    garmentCount: number;
+    damageCount: number;
+    repairCount: number;
+    recurrenceCount: number;
+    recurrenceRate: number | null;
+    wearCount: number;
+    wearsPerDamage: number | null;
+    averageLifespanDays: number | null;
+    observedCount: number;
+    censoredCount: number;
+    averageLifespanWears: number | null;
+    topDamageTypes: Array<{ key: string; count: number }>;
+    topParts: Array<{ key: string; count: number }>;
+    knitOrWoven: string | null;
+  }>;
+  worst: {
+    key: string;
+    materialPrimary: string;
+    materialLabel: string;
+    season: Season;
+    seasonLabel: string;
+    band: WearFrequencyBand;
+    bandLabel: string;
+    knitOrWoven: string | null;
+    cell: DurabilityMatrixResponse['cells'][number];
+    materialAlternatives: Array<{
+      materialPrimary: string;
+      label: string;
+      durabilityScore: number | null;
+      averageLifespanDays: number | null;
+      observedCount: number;
+      reason: string;
+      source: 'observed' | 'dictionary';
+    }>;
+    stitchSuggestions: Array<{
+      stitchCode: string;
+      label: string;
+      averageLifespanDays: number | null;
+      observedCount: number;
+      reason: string;
+      source: 'observed' | 'dictionary';
+      kind: 'recommend' | 'avoid';
+    }>;
+    preventionAdvice: string[];
+    summary: string;
+    sampleSize: number;
+    confident: boolean;
+  } | null;
+  insights: Insight[];
+}
+
 export interface HealthDistributionResponse {
   levels: Record<string, number>;
   items: Array<{

@@ -95,8 +95,13 @@ export interface RepairLifespanSample extends LifespanResult {
   repairId: string;
   garmentId: string;
   materialPrimary: string;
+  knitOrWoven: string;
   stitchCode: string;
   finishedAt: Date;
+  /** 被补破损的发现时间（交叉分组的"季节"口径取这个月份） */
+  detectedAt: Date;
+  damageTypeId: string;
+  partId: string | null;
 }
 
 export interface GarmentStats {
@@ -178,8 +183,12 @@ export function computeGarmentStats(dataset: Dataset, garmentId: string, today =
       repairId: repair.id,
       garmentId,
       materialPrimary: garment.materialPrimary,
+      knitOrWoven: garment.knitOrWoven,
       stitchCode: repair.stitchId,
       finishedAt: repair.finishedAt,
+      detectedAt: damage.detectedAt,
+      damageTypeId: damage.damageTypeId,
+      partId: damage.partId,
     });
   }
 

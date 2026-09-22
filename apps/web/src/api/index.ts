@@ -7,6 +7,7 @@ import type {
   DamageDetail,
   DamageListItem,
   DictionaryResponse,
+  DurabilityMatrixResponse,
   FabricSourceItem,
   GarmentDetailResponse,
   GarmentListItem,
@@ -181,6 +182,7 @@ export const analyticsApi = {
   bySeason: () => api.get<BySeasonResponse>('/analytics/by-season'),
   byFrequency: () => api.get<ByFrequencyResponse>('/analytics/by-frequency'),
   stitchEffectiveness: () => api.get<StitchEffectivenessResponse>('/analytics/stitch-effectiveness'),
+  durabilityMatrix: () => api.get<DurabilityMatrixResponse>('/analytics/durability-matrix'),
   healthDistribution: () => api.get<HealthDistributionResponse>('/analytics/health-distribution'),
   wearTrend: (months = 12) => api.get<{ months: Array<{ month: string; wearCount: number; damageCount: number }> }>('/analytics/wear-trend', { months }),
 };

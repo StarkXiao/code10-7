@@ -233,6 +233,7 @@ const readEndpoints = [
   ['/analytics/by-season', '按季节'],
   ['/analytics/by-frequency', '按频率'],
   ['/analytics/stitch-effectiveness', '针法效果'],
+  ['/analytics/durability-matrix', '材质×季节×频率交叉'],
   ['/analytics/health-distribution', '健康分分布'],
   [`/analytics/garments/${garment.id}/health`, '单件健康分'],
   ['/analytics/wear-trend?months=12', '穿着趋势'],

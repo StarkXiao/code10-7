@@ -20,6 +20,7 @@ import type {
   ByFrequencyResponse,
   ByMaterialResponse,
   BySeasonResponse,
+  DurabilityMatrixResponse,
   HealthDistributionResponse,
   StitchEffectivenessResponse,
 } from '../types';
@@ -31,9 +32,12 @@ const byMaterial = ref<ByMaterialResponse | null>(null);
 const bySeason = ref<BySeasonResponse | null>(null);
 const byFrequency = ref<ByFrequencyResponse | null>(null);
 const stitches = ref<StitchEffectivenessResponse | null>(null);
+const durability = ref<DurabilityMatrixResponse | null>(null);
 const health = ref<HealthDistributionResponse | null>(null);
 const chartRef = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+
+const crossInsights = computed(() => durability.value?.insights ?? []);
 
 const currentInsights = computed(() => {
   if (dimension.value === 'material') return byMaterial.value?.insights ?? [];
@@ -41,14 +45,35 @@ const currentInsights = computed(() => {
   return byFrequency.value?.insights ?? [];
 });
 
+const worstCombo = computed(() => durability.value?.worst ?? null);
+
+const matrixRows = computed(() => durability.value?.cells ?? []);
+
+function materialLabelOf(code: string): string {
+  return MATERIAL_PRIMARY_LABEL[code as MaterialPrimary] ?? code;
+}
+function seasonLabelOf(code: string): string {
+  return SEASON_LABEL[code as Season] ?? code;
+}
+function bandLabelOf(code: string): string {
+  return WEAR_FREQUENCY_BAND_LABEL[code as WearFrequencyBand] ?? code;
+}
+function rowClassName({ row }: { row: DurabilityMatrixResponse['cells'][number] }): string {
+  const worst = worstCombo.value;
+  return worst && row.materialPrimary === worst.materialPrimary && row.season === worst.season && row.band === worst.band
+    ? 'worst-row'
+    : '';
+}
+
 onMounted(async () => {
   try {
-    const [ov, material, season, frequency, stitch, healthData] = await Promise.all([
+    const [ov, material, season, frequency, stitch, matrix, healthData] = await Promise.all([
       analyticsApi.overview(),
       analyticsApi.byMaterial(),
       analyticsApi.bySeason(),
       analyticsApi.byFrequency(),
       analyticsApi.stitchEffectiveness(),
+      analyticsApi.durabilityMatrix(),
       analyticsApi.healthDistribution(),
     ]);
     overview.value = ov;
@@ -56,6 +81,7 @@ onMounted(async () => {
     bySeason.value = season;
     byFrequency.value = frequency;
     stitches.value = stitch;
+    durability.value = matrix;
     health.value = healthData;
     renderChart();
   } catch (error) {
@@ -214,6 +240,63 @@ function openGarment(row: { garmentId: string }): void {
       </div>
     </el-card>
 
+    <el-card v-if="worstCombo" shadow="never" class="worst-card" style="margin-bottom: 12px">
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+          <span>材质 × 季节 × 穿着频率：长期耐用性结论</span>
+          <el-tag :type="worstCombo.confident ? 'danger' : 'warning'" size="small">
+            {{ worstCombo.confident ? `已复发样本 ${worstCombo.sampleSize} 个` : '样本不足，已结合字典基线' }}
+          </el-tag>
+        </div>
+      </template>
+
+      <el-alert :title="worstCombo.summary" type="error" :closable="false" show-icon style="margin-bottom: 12px" />
+
+      <el-row :gutter="12">
+        <el-col :xs="24" :md="12">
+          <div class="advice-title">下一件怎么选材</div>
+          <div v-for="item in worstCombo.materialAlternatives" :key="item.materialPrimary" class="advice-item">
+            <div class="advice-head">
+              <el-tag size="small" :type="item.source === 'observed' ? 'success' : 'info'">
+                {{ item.source === 'observed' ? '你的数据' : '材质基线' }}
+              </el-tag>
+              <span class="advice-name">{{ item.label }}</span>
+              <span v-if="item.durabilityScore !== null" class="advice-meta">耐用度 {{ item.durabilityScore }}/5</span>
+              <span v-if="item.averageLifespanDays !== null" class="advice-meta">平均 {{ item.averageLifespanDays }} 天</span>
+            </div>
+            <div class="advice-reason">{{ item.reason }}</div>
+          </div>
+          <div v-if="!worstCombo.materialAlternatives.length" class="advice-empty">暂无替代材质建议，先积累更多材质的穿着记录。</div>
+        </el-col>
+
+        <el-col :xs="24" :md="12">
+          <div class="advice-title">这种布该用什么针法</div>
+          <div v-for="item in worstCombo.stitchSuggestions" :key="`${item.stitchCode}-${item.kind}`" class="advice-item">
+            <div class="advice-head">
+              <el-tag size="small" :type="item.kind === 'avoid' ? 'danger' : item.source === 'observed' ? 'success' : 'info'">
+                {{ item.kind === 'avoid' ? '避免' : item.source === 'observed' ? '你的数据' : '针法基线' }}
+              </el-tag>
+              <span class="advice-name">{{ item.label }}</span>
+              <span v-if="item.averageLifespanDays !== null" class="advice-meta">平均 {{ item.averageLifespanDays }} 天</span>
+            </div>
+            <div class="advice-reason">{{ item.reason }}</div>
+          </div>
+          <div v-if="!worstCombo.stitchSuggestions.length" class="advice-empty">暂无针法建议。</div>
+        </el-col>
+      </el-row>
+
+      <div v-if="worstCombo.preventionAdvice.length" class="advice-title" style="margin-top: 12px">预防性建议</div>
+      <ul v-if="worstCombo.preventionAdvice.length" class="advice-list">
+        <li v-for="(text, i) in worstCombo.preventionAdvice" :key="i">{{ text }}</li>
+      </ul>
+
+      <div v-if="crossInsights.slice(1).length" class="advice-footnote">
+        <div v-for="(item, i) in crossInsights.slice(1)" :key="i">
+          {{ item.text }}
+        </div>
+      </div>
+    </el-card>
+
     <el-card shadow="never" style="margin-bottom: 12px">
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
@@ -286,5 +369,102 @@ function openGarment(row: { garmentId: string }): void {
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card shadow="never" style="margin-top: 12px">
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+          <span>交叉明细（材质 × 季节 × 频率，按修补寿命升序）</span>
+          <span style="font-size: 12px; color: #909399">红色行为最不耐用组合；寿命「—」表示尚无复发样本（右删失）</span>
+        </div>
+      </template>
+      <el-table :data="matrixRows" size="small" max-height="420" :row-class-name="rowClassName">
+        <el-table-column label="材质" width="90">
+          <template #default="{ row }">{{ materialLabelOf(row.materialPrimary) }}</template>
+        </el-table-column>
+        <el-table-column label="季节" width="70">
+          <template #default="{ row }">{{ seasonLabelOf(row.season) }}</template>
+        </el-table-column>
+        <el-table-column label="穿着频率" min-width="130">
+          <template #default="{ row }">{{ bandLabelOf(row.band) }}</template>
+        </el-table-column>
+        <el-table-column prop="garmentCount" label="衣物数" width="80" />
+        <el-table-column prop="damageCount" label="破损" width="70" />
+        <el-table-column label="每穿/破损" width="100">
+          <template #default="{ row }">{{ row.wearsPerDamage ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="平均寿命(天)" width="110">
+          <template #default="{ row }">
+            <span :style="{ color: row === worstCombo?.cell ? '#c2410c' : '', fontWeight: row === worstCombo?.cell ? 700 : 400 }">
+              {{ row.averageLifespanDays ?? '—' }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="observedCount" label="已复发" width="80" />
+        <el-table-column prop="censoredCount" label="未复发" width="80" />
+        <el-table-column label="复修率" width="80">
+          <template #default="{ row }">{{ row.recurrenceRate === null ? '—' : `${(row.recurrenceRate * 100).toFixed(0)}%` }}</template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
+
+<style scoped>
+.worst-card :deep(.el-alert--error) {
+  font-weight: 600;
+}
+.advice-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+.advice-item {
+  padding: 8px;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: #fafafa;
+}
+.advice-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.advice-name {
+  font-weight: 600;
+}
+.advice-meta {
+  font-size: 12px;
+  color: #909399;
+}
+.advice-reason {
+  font-size: 12px;
+  color: #606266;
+  margin-top: 4px;
+  line-height: 1.6;
+}
+.advice-empty {
+  font-size: 12px;
+  color: #909399;
+}
+.advice-list {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.8;
+}
+.advice-footnote {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #e4e7ed;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.8;
+}
+:deep(.worst-row) {
+  background-color: #fef0f0 !important;
+}
+</style>
