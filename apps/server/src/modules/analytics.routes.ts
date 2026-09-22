@@ -9,6 +9,7 @@ import {
   byFrequency,
   byMaterial,
   bySeason,
+  crossDurability,
   garmentAnalytics,
   healthDistribution,
   stitchEffectiveness,
@@ -55,6 +56,13 @@ analyticsRouter.get(
   '/by-frequency',
   handler(async (req, res) => {
     ok(req, res, await byFrequency(req.ctx.wardrobeId));
+  }),
+);
+
+analyticsRouter.get(
+  '/cross-durability',
+  handler(async (req, res) => {
+    ok(req, res, await crossDurability(req.ctx.wardrobeId));
   }),
 );
 

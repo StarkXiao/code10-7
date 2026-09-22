@@ -513,6 +513,48 @@ export interface StitchEffectivenessResponse {
   insights: Insight[];
 }
 
+export interface CrossCell {
+  key: string;
+  materialPrimary: MaterialPrimary;
+  season: Season;
+  band: WearFrequencyBand;
+  garmentCount: number;
+  wearCount: number;
+  damageCount: number;
+  recurrenceCount: number;
+  wearCountPerDamage: number | null;
+  averageLifespanDays: number | null;
+  observedLifespanCount: number;
+  censoredLifespanCount: number;
+  topDamageTypes: Array<{ key: string; count: number }>;
+}
+
+export interface CrossDurabilityResponse {
+  cells: CrossCell[];
+  worst: CrossCell | null;
+  best: CrossCell | null;
+  materialAdvice: {
+    current: MaterialPrimary;
+    suggested: MaterialPrimary;
+    scope: 'same_season_band' | 'same_season' | 'global' | 'dictionary';
+    wearCount: number;
+    damageCount: number;
+    wearCountPerDamage: number | null;
+    sampleSize: number;
+    text: string;
+  } | null;
+  stitchAdvice: {
+    stitchCode: string;
+    stitchName: string;
+    materialPrimary: MaterialPrimary;
+    source: 'observed' | 'observed_global' | 'dictionary';
+    averageLifespanDays: number | null;
+    sampleSize: number;
+    text: string;
+  } | null;
+  insights: Insight[];
+}
+
 export interface HealthDistributionResponse {
   levels: Record<string, number>;
   items: Array<{

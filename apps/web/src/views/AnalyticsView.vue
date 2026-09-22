@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import * as echarts from 'echarts';
 import {
+  DAMAGE_TYPE_LABEL,
   MATERIAL_PRIMARY_LABEL,
   SEASON_LABEL,
   WEAR_FREQUENCY_BAND_LABEL,
+  type DamageTypeCode,
   type MaterialPrimary,
   type Season,
   type WearFrequencyBand,
@@ -20,6 +22,7 @@ import type {
   ByFrequencyResponse,
   ByMaterialResponse,
   BySeasonResponse,
+  CrossDurabilityResponse,
   HealthDistributionResponse,
   StitchEffectivenessResponse,
 } from '../types';
@@ -30,6 +33,7 @@ const overview = ref<AnalyticsOverview | null>(null);
 const byMaterial = ref<ByMaterialResponse | null>(null);
 const bySeason = ref<BySeasonResponse | null>(null);
 const byFrequency = ref<ByFrequencyResponse | null>(null);
+const cross = ref<CrossDurabilityResponse | null>(null);
 const stitches = ref<StitchEffectivenessResponse | null>(null);
 const health = ref<HealthDistributionResponse | null>(null);
 const chartRef = ref<HTMLDivElement | null>(null);
@@ -43,11 +47,12 @@ const currentInsights = computed(() => {
 
 onMounted(async () => {
   try {
-    const [ov, material, season, frequency, stitch, healthData] = await Promise.all([
+    const [ov, material, season, frequency, crossData, stitch, healthData] = await Promise.all([
       analyticsApi.overview(),
       analyticsApi.byMaterial(),
       analyticsApi.bySeason(),
       analyticsApi.byFrequency(),
+      analyticsApi.crossDurability(),
       analyticsApi.stitchEffectiveness(),
       analyticsApi.healthDistribution(),
     ]);
@@ -55,6 +60,7 @@ onMounted(async () => {
     byMaterial.value = material;
     bySeason.value = season;
     byFrequency.value = frequency;
+    cross.value = crossData;
     stitches.value = stitch;
     health.value = healthData;
     renderChart();
@@ -164,6 +170,18 @@ function exportCurrent(): void {
   window.open(`/api/export/wardrobe.csv?dataset=${dataset}&token=${encodeURIComponent(localStorage.getItem('gml.token') ?? '')}`, '_blank');
 }
 
+function crossRowClass({ row }: { row: { key: string } }): string {
+  return cross.value?.worst?.key === row.key ? 'cross-row-worst' : '';
+}
+
+function damageTypeLabel(code: string): string {
+  return DAMAGE_TYPE_LABEL[code as DamageTypeCode] ?? code;
+}
+
+function topDamageText(types: Array<{ key: string; count: number }>): string {
+  return types.map((t) => `${damageTypeLabel(t.key)}×${t.count}`).join('、') || '—';
+}
+
 function openGarment(row: { garmentId: string }): void {
   void router.push({ name: 'garment-detail', params: { id: row.garmentId } });
 }
@@ -233,6 +251,72 @@ function openGarment(row: { garmentId: string }): void {
       <InsightList :insights="currentInsights" />
     </el-card>
 
+    <el-card v-if="cross" shadow="never" style="margin-bottom: 12px">
+      <template #header>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+          <span>交叉分组：材质 × 季节 × 穿着频率</span>
+          <span style="font-size: 12px; color: #909399">含已退役衣物 · 按"每多少次穿着出现一次破损"升序，越小越不耐用</span>
+        </div>
+      </template>
+
+      <div v-if="cross.materialAdvice || cross.stitchAdvice" style="display: grid; gap: 8px; margin-bottom: 12px">
+        <el-alert
+          v-if="cross.materialAdvice"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="下次选材建议"
+          :description="cross.materialAdvice.text"
+        />
+        <el-alert
+          v-if="cross.stitchAdvice"
+          type="success"
+          :closable="false"
+          show-icon
+          title="下次针法建议"
+          :description="cross.stitchAdvice.text"
+        />
+      </div>
+
+      <InsightList v-if="cross.insights.length" :insights="cross.insights" />
+
+      <el-table
+        v-if="cross.cells.length"
+        :data="cross.cells"
+        size="small"
+        max-height="360"
+        row-key="key"
+        :row-class-name="crossRowClass"
+        style="margin-top: 12px"
+      >
+        <el-table-column label="组合" min-width="230">
+          <template #default="{ row }">
+            {{ MATERIAL_PRIMARY_LABEL[row.materialPrimary as MaterialPrimary] ?? row.materialPrimary }}
+            × {{ SEASON_LABEL[row.season as Season] ?? row.season }}
+            × {{ WEAR_FREQUENCY_BAND_LABEL[row.band as WearFrequencyBand] ?? row.band }}
+            <el-tag v-if="cross.worst?.key === row.key" type="danger" size="small" effect="dark">最不耐用</el-tag>
+            <el-tag v-else-if="cross.best?.key === row.key" type="success" size="small">最耐用</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="garmentCount" label="衣物" width="70" />
+        <el-table-column prop="wearCount" label="穿着" width="80" sortable />
+        <el-table-column prop="damageCount" label="破损" width="80" sortable />
+        <el-table-column label="每N穿1坏" width="100">
+          <template #default="{ row }">{{ row.wearCountPerDamage ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="修补寿命(天)" width="110">
+          <template #default="{ row }">{{ row.averageLifespanDays ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="寿命样本" width="130">
+          <template #default="{ row }">已复发 {{ row.observedLifespanCount }} / 未复发 {{ row.censoredLifespanCount }}</template>
+        </el-table-column>
+        <el-table-column label="主要破损" min-width="130">
+          <template #default="{ row }">{{ topDamageText(row.topDamageTypes) }}</template>
+        </el-table-column>
+      </el-table>
+      <EmptyState v-else title="还没有交叉数据" description="先积累穿着与破损记录，这里会告诉你哪种组合最不耐用。" />
+    </el-card>
+
     <el-row :gutter="12">
       <el-col :xs="24" :md="12">
         <el-card shadow="never">
@@ -288,3 +372,9 @@ function openGarment(row: { garmentId: string }): void {
     </el-row>
   </div>
 </template>
+
+<style scoped>
+:deep(.cross-row-worst) {
+  --el-table-tr-bg-color: #fef0f0;
+}
+</style>
